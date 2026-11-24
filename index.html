@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CorruptSave</title>
+  <style>
+    :root { --bg:#0b0d12; --panel:#151926; --panel2:#101420; --text:#e8ecf3; --muted:#97a3b6; --accent:#7cf4c2; --bad:#ff6b8b; --warn:#ffd166; --line:#273148; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; background:radial-gradient(1200px 500px at 20% -10%, #1a2540, transparent), var(--bg); color:var(--text); }
+    .wrap { max-width:1200px; margin:0 auto; padding:20px; display:grid; grid-template-columns: 1.2fr .9fr; gap:16px; }
+    .panel { background:linear-gradient(180deg, rgba(255,255,255,.03), transparent), var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+    h1,h2,h3 { margin:0 0 10px; font-weight:800; letter-spacing:.02em; }
+    h1 { font-size:28px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .tag { font-size:12px; color:var(--bg); background:var(--accent); padding:3px 8px; border-radius:999px; }
+    p, li, label, .small { color:var(--muted); font-size:13px; line-height:1.45; }
+    .stats { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:10px; margin:14px 0; }
+    .stat { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px; }
+    .stat .k { font-size:11px; color:var(--muted); text-transform:uppercase; }
+    .stat .v { font-size:20px; margin-top:4px; word-break:break-word; }
+    .actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+    button, .btn { background:#1d2638; color:var(--text); border:1px solid #35445f; padding:9px 12px; border-radius:9px; cursor:pointer; font:inherit; font-size:13px; }
+    button:hover { border-color:var(--accent); transform:translateY(-1px); }
+    button.bad { border-color:#6b2d3d; color:#ffdce4; }
+    button.good { border-color:#285a49; }
+    .log { background:#090c12; border:1px solid var(--line); border-radius:10px; padding:10px; height:260px; overflow:auto; font-size:12px; }
+    .log div { padding:4px 0; border-bottom:1px dashed #1d2433; }
+    .log .sys { color:var(--accent); } .log .warn { color:var(--warn); } .log .bad { color:var(--bad); }
+    textarea, input, select { width:100%; background:#090c12; color:var(--text); border:1px solid #334058; border-radius:9px; padding:9px; font:inherit; font-size:12px; }
+    textarea { min-height:180px; resize:vertical; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .row { display:flex; gap:8px; margin:8px 0; align-items:center; }
+    .row > * { flex:1; }
+    .editor { display:grid; gap:8px; }
+    .banner { margin:10px 0; padding:10px; border-radius:10px; border:1px solid var(--line); background:#121828; font-size:12px; color:var(--muted); }
+    .glitch { animation:shake .12s linear infinite; text-shadow: 2px 0 #ff4d6d, -2px 0 #4de1ff; }
+    @keyframes shake { 0%{transform:translate(0,0)}25%{transform:translate(1px,-1px)}50%{transform:translate(-1px,1px)}75%{transform:translate(1px,1px)}100%{transform:translate(0,0)} }
+    .void { filter:invert(1) hue-rotate(180deg) saturate(.3); }
+    .ascend { box-shadow: inset 0 0 120px rgba(124,244,194,.15); }
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.65); display:none; align-items:center; justify-content:center; padding:20px; z-index:50; }
+    .modal { max-width:720px; width:100%; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; }
+    .modal.show, .modal-bg.show { display:flex; }
+    code { background:#090c12; padding:2px 5px; border-radius:5px; color:#d7fbe9; }
+    .footer { grid-column:1/-1; color:var(--muted); font-size:12px; text-align:center; padding:4px; }
+    @media (max-width:900px){ .wrap{grid-template-columns:1fr;} .stats{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app">
+    <section class="panel">
+      <h1>CorruptSave <span class="tag">edit reality</span></h1>
+      <p>a tiny browser game where the save file is fair game. fight slimes, get gold, buy nonsense - or crack open the state and see what breaks. built for local chaos. 🎮</p>
+      <div id="stateBanner" class="banner">reality stable. for now.</div>
+      <div class="stats">
+        <div class="stat"><div class="k">HP</div><div class="v" id="sHp">-</div></div>
+        <div class="stat"><div class="k">Gold</div><div class="v" id="sGold">-</div></div>
+        <div class="stat"><div class="k">Level</div><div class="v" id="sLevel">-</div></div>
+        <div class="stat"><div class="k">Glitch</div><div class="v" id="sGlitch">-</div></div>
+      </div>
+      <div class="small">enemy: <span id="enemyName">slime</span> | enemy hp: <span id="enemyHp">10</span> | weapon: <span id="weaponName">stick</span></div>
+      <div class="actions">
+        <button class="good" id="btnFight">⚔️ fight</button>
+        <button id="btnHeal">🧪 heal (10g)</button>
+        <button id="btnShop">🛒 buy sword (50g)</button>
+        <button id="btnNext">🌀 next zone</button>
+        <button id="btnSave">💾 save</button>
+        <button id="btnTutorial">📘 tutorial</button>
+        <button class="bad" id="btnReset">🗑️ reset save</button>
+      </div>
+      <h3>event log</h3>
+      <div class="log" id="log"></div>
+    </section>
+
+    <aside class="panel">
+      <h2>save editor / reality console</h2>
+      <p>edit anything. localStorage, URL params, import/export, and browser console all work. try <code>NaN</code>, <code>Infinity</code>, <code>-Infinity</code>, <code>null</code>, <code>"forgotten"</code>. 😈</p>
+      <div class="editor">
+        <div class="grid2">
+          <label>hp<input id="eHp"></label>
+          <label>gold<input id="eGold"></label>
+          <label>level<input id="eLevel"></label>
+          <label>glitch<input id="eGlitch"></label>
+        </div>
+        <label>name<input id="eName"></label>
+        <label>weapon<input id="eWeapon"></label>
+        <div class="row">
+          <button id="btnApply">apply edits</button>
+          <button id="btnExport">export json</button>
+        </div>
+        <label>raw save json (import/export/localStorage mirror)<textarea id="raw"></textarea></label>
+        <div class="row">
+          <button id="btnImport">import json</button>
+          <button id="btnURL">copy cursed url</button>
+        </div>
+        <div class="banner small">
+          console cheats: <code>game.state.gold = Infinity; game.render()</code><br>
+          localStorage: <code>corruptsave_state</code> | sessionStorage: <code>corruptsave_session</code><br>
+          cookie: <code>corruptsave_cookie</code> | indexedDB: <code>CorruptSaveDB/saves/state</code><br>
+          url example: <code>?gold=NaN&hp=Infinity&name=null</code>
+        </div>
+      </div>
+    </aside>
+    <div class="footer">CorruptSave - edit the save, break the rules, pet the glitch slime. no purple hearts were harmed. 🐸</div>
+  </div>
+
+  <div class="modal-bg" id="tutorialBg">
+    <div class="modal">
+      <h2>tutorial: how to corrupt reality 📘</h2>
+      <ol>
+        <li><b>play normal:</b> hit <code>fight</code>, earn gold, heal, buy sword, go next zone.</li>
+        <li><b>in-game editor:</b> change values on the right. try <code>NaN</code>, <code>Infinity</code>, <code>-Infinity</code>, then click <code>apply edits</code>.</li>
+        <li><b>localStorage:</b> open devtools > Application/Storage > Local Storage, edit key <code>corruptsave_state</code>.</li>
+        <li><b>URL params:</b> add <code>?gold=Infinity&glitch=NaN</code> to the URL. reload applies them.</li>
+        <li><b>console:</b> use <code>game.state</code>, e.g. <code>game.state.hp = -Infinity; game.save(); game.render()</code>.</li>
+        <li><b>import/export:</b> copy JSON out, mangle it, import it back.</li>
+      </ol>
+      <p>special behavior: <code>NaN</code> makes systems confused, <code>Infinity</code> makes you ascended/broken rich, <code>-Infinity</code> drags you into void mode, weird names/values can trigger hidden text. experiment. 🧪</p>
+      <div class="row"><button id="tutorialClose" class="good">let me cook</button><button id="tutorialNever">don't show again</button></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const KEY = 'corruptsave_state';
+  const TUT_KEY = 'corruptsave_tutorial_seen';
+  const SKEY = 'corruptsave_session';
+  const CKEY = 'corruptsave_cookie';
+  const defaults = () => ({ hp: 20, maxHp: 20, gold: 0, level: 1, glitch: 0, name: 'lux', weapon: 'stick', enemy: { name: 'slime', hp: 10, maxHp: 10 }, zone: 1, log: ['welcome to corruptsave. reality is editable.'] });
+  const $ = id => document.getElementById(id);
+  const logEl = $('log');
+  const clampText = v => String(v).length > 120 ? String(v).slice(0,120) + '…' : String(v);
+
+  function parseWeird(v, fallback=0) {
+    if (v === null || v === undefined) return fallback;
+    if (typeof v === 'number') return v;
+    const s = String(v).trim();
+    if (s === '') return fallback;
+    if (/^nan$/i.test(s)) return NaN;
+    if (/^\+?infinity$/i.test(s)) return Infinity;
+    if (/^-infinity$/i.test(s)) return -Infinity;
+    if (/^null$/i.test(s)) return null;
+    if (/^undefined$/i.test(s)) return undefined;
+    if (/^true$/i.test(s)) return true;
+    if (/^false$/i.test(s)) return false;
+    if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+    return s;
+  }
+
+  function num(v, fallback=0) {
+    const p = parseWeird(v, fallback);
+    if (typeof p === 'number') return p;
+    if (p === null || p === undefined || p === '') return fallback;
+    const n = Number(p);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function weirdLabel(v) {
+    if (typeof v === 'number') {
+      if (Number.isNaN(v)) return 'NaN';
+      if (v === Infinity) return 'Infinity';
+      if (v === -Infinity) return '-Infinity';
+    }
+    if (v === null) return 'null';
+    if (v === undefined) return 'undefined';
+    return String(v);
+  }
+
+  function getCookie(name) {
+    const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()\[\]\\\/\+^])/g,'\\$1') + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  function setCookie(name, value) {
+    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; SameSite=Lax`;
+  }
+
+  function load() {
+    let s = defaults();
+    try { const raw = localStorage.getItem(KEY); if (raw) s = { ...s, ...JSON.parse(raw) }; } catch {}
+    try { const raw = sessionStorage.getItem(SKEY); if (raw) s = { ...s, ...JSON.parse(raw), sessionTouched: true }; } catch {}
+    try { const raw = getCookie(CKEY); if (raw) s = { ...s, ...JSON.parse(raw), cookieTouched: true }; } catch {}
+    const q = new URLSearchParams(location.search);
+    for (const [k,v] of q.entries()) {
+      if (k in s) s[k] = parseWeird(v, s[k]);
+      if (k === 'enemyHp') s.enemy.hp = parseWeird(v, s.enemy.hp);
+    }
+    if (!s.enemy || typeof s.enemy !== 'object') s.enemy = defaults().enemy;
+    s.enemy.hp = parseWeird(s.enemy.hp, 10);
+    s.enemy.maxHp = parseWeird(s.enemy.maxHp, 10);
+    s.enemy.name = String(s.enemy.name || 'slime');
+    return s;
+  }
+
+  let state = load();
+  function save() {
+    const raw = JSON.stringify(state);
+    try { localStorage.setItem(KEY, raw); } catch {}
+    try { sessionStorage.setItem(SKEY, raw); } catch {}
+    try { setCookie(CKEY, raw.slice(0, 3500)); } catch {}
+    syncEditor();
+  }
+  function addLog(msg, cls='sys') {
+    state.log = state.log || [];
+    state.log.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+    state.log = state.log.slice(-80);
+    const d = document.createElement('div'); d.className = cls; d.textContent = state.log[state.log.length-1];
+    logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+  }
+  function rebuildLog() {
+    logEl.innerHTML = '';
+    (state.log || []).slice(-80).forEach(line => { const d=document.createElement('div'); d.textContent=line; if (/warn|glitch|NaN|undefined|null|void/i.test(line)) d.className='warn'; if (/dead|collapsed|corrupt|ERROR|-Infinity/i.test(line)) d.className='bad'; if (/saved|welcome|ascend|reality/i.test(line)) d.className='sys'; logEl.appendChild(d); });
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function syncEditor() {
+    $('eHp').value = weirdLabel(state.hp);
+    $('eGold').value = weirdLabel(state.gold);
+    $('eLevel').value = weirdLabel(state.level);
+    $('eGlitch').value = weirdLabel(state.glitch);
+    $('eName').value = weirdLabel(state.name);
+    $('eWeapon').value = weirdLabel(state.weapon);
+    $('raw').value = JSON.stringify(state, null, 2);
+  }
+
+  function realityMode() {
+    const vals = [state.hp, state.gold, state.level, state.glitch, state.enemy?.hp];
+    const hasNaN = vals.some(v => typeof v === 'number' && Number.isNaN(v));
+    const hasInf = vals.some(v => v === Infinity);
+    const hasNegInf = vals.some(v => v === -Infinity);
+    const nameBad = state.name === null || state.name === undefined || /^null$/i.test(String(state.name)) || /^undefined$/i.test(String(state.name)) || String(state.name).trim() === '';
+    document.body.classList.toggle('void', !!hasNegInf);
+    document.body.classList.toggle('ascend', !!hasInf && !hasNegInf);
+    $('app').classList.toggle('glitch', !!hasNaN);
+    let msg = 'reality stable. for now.';
+    if (nameBad) msg = 'identity corruption detected: who are you?';
+    if (hasNaN) msg = 'NaN leak detected: math is having a panic attack.';
+    if (hasInf) msg = 'Infinity overflow: you are becoming financially/physically illegal.';
+    if (hasNegInf) msg = 'NEGATIVE INFINITY: welcome to the void. numbers fell downstairs.';
+    if (hasNaN && hasInf) msg = 'NaN + Infinity: reality is screaming in two languages.';
+    $('stateBanner').textContent = msg;
+    return { hasNaN, hasInf, hasNegInf, nameBad };
+  }
+
+  function enemyForZone(z) {
+    const names = ['slime','angry slime','glitch bat','tax goblin','void snail','regex dragon','corrupted boss'];
+    const i = Math.min(names.length-1, Math.max(0, Math.floor((Number(z)||1)-1)));
+    const base = 8 + i*6;
+    return { name:names[i], hp:base, maxHp:base };
+  }
+
+  function render() {
+    const mode = realityMode();
+    $('sHp').textContent = weirdLabel(state.hp);
+    $('sGold').textContent = weirdLabel(state.gold);
+    $('sLevel').textContent = weirdLabel(state.level);
+    $('sGlitch').textContent = weirdLabel(state.glitch);
+    $('enemyName').textContent = weirdLabel(state.enemy?.name || '???');
+    $('enemyHp').textContent = weirdLabel(state.enemy?.hp ?? '?');
+    $('weaponName').textContent = weirdLabel(state.weapon || 'nothing');
+    document.title = mode.hasNaN ? 'C̷o̷r̷r̷u̷p̷t̷S̷a̷v̷e̷' : mode.hasNegInf ? 'VOID SAVE' : mode.hasInf ? 'ASCENDED SAVE' : 'CorruptSave';
+    if (mode.hasInf) $('sGold').textContent = weirdLabel(state.gold) + ' ✨';
+    if (mode.hasNaN) $('sGlitch').textContent = weirdLabel(state.glitch) + ' ?!';
+    if (mode.nameBad) $('enemyName').textContent = `${$('enemyName').textContent} (it knows you forgot your name)`;
+    syncEditor();
+  }
+
+  function dmgRoll() {
+    const base = String(state.weapon).toLowerCase().includes('sword') ? 7 : 3;
+    const lvl = num(state.level, 1);
+    let dmg = base + Math.max(0, Math.floor(lvl));
+    if (state.gold === Infinity || state.level === Infinity) dmg = Infinity;
+    if (Number.isNaN(state.gold) || Number.isNaN(state.level) || Number.isNaN(state.glitch)) dmg = NaN;
+    if (state.glitch === -Infinity) dmg = 0;
+    return dmg;
+  }
+
+  function fight() {
+    const mode = realityMode();
+    let dmg = dmgRoll();
+    if (Number.isNaN(dmg)) {
+      state.glitch = num(state.glitch,0) + 1;
+      state.enemy.hp = Number.isNaN(state.enemy.hp) ? 0 : state.enemy.hp;
+      addLog('you swung NaN damage. the slime files a bug report.', 'warn');
+    } else if (dmg === Infinity) {
+      state.enemy.hp = 0;
+      addLog('INFINITE DAMAGE. enemy deleted from canon.', 'sys');
+    } else {
+      state.enemy.hp = num(state.enemy.hp, 10) - dmg;
+      addLog(`you hit ${state.enemy.name} for ${weirdLabel(dmg)} damage.`, 'sys');
+    }
+
+    if (num(state.enemy.hp,1) <= 0) {
+      const reward = state.gold === Infinity ? Infinity : (Number.isNaN(state.gold) ? NaN : num(state.gold,0) + 8 + num(state.level,1)*2);
+      state.gold = reward;
+      state.level = Number.isNaN(state.level) ? NaN : (state.level === Infinity ? Infinity : num(state.level,1) + 0.25);
+      addLog(`enemy defeated. gold is now ${weirdLabel(state.gold)}.`, 'sys');
+      state.enemy = enemyForZone(num(state.zone,1) + (Math.random()>.7?1:0));
+    } else {
+      let edmg = 2 + Math.floor(Math.random()*3);
+      if (mode.hasNegInf) edmg = 9999;
+      if (state.hp === Infinity) { addLog('enemy hits you, but infinity HP just laughs.', 'warn'); }
+      else if (Number.isNaN(state.hp)) { state.hp = NaN; addLog('enemy hit you. your HP was NaN so... still NaN?', 'warn'); }
+      else { state.hp = num(state.hp,20) - edmg; addLog(`${state.enemy.name} hits you for ${edmg}.`, 'bad'); }
+    }
+
+    if (typeof state.hp === 'number' && !Number.isNaN(state.hp) && state.hp !== Infinity && state.hp <= 0) {
+      addLog('you died. the save file giggles. HP reset to 1, gold taxed.', 'bad');
+      state.hp = 1;
+      if (typeof state.gold === 'number' && !Number.isNaN(state.gold) && state.gold !== Infinity) state.gold = Math.max(0, Math.floor(state.gold/2));
+    }
+    save(); render();
+  }
+
+  function heal() {
+    if (state.gold === -Infinity) { addLog('you try to pay with -Infinity gold. the potion shop bans you from economics.', 'bad'); return save(), render(); }
+    if (Number.isNaN(state.gold)) { state.hp = NaN; state.glitch = num(state.glitch,0)+1; addLog('NaN gold transaction corrupted your blood. HP became NaN.', 'warn'); return save(), render(); }
+    if (state.gold !== Infinity && num(state.gold,0) < 10) { addLog('not enough gold. go hit a slime.', 'warn'); return; }
+    if (state.gold !== Infinity) state.gold = num(state.gold,0) - 10;
+    if (state.hp === Infinity) addLog('you drank a potion at infinite HP. it tasted like redundancy.', 'warn');
+    else if (Number.isNaN(state.hp)) { state.hp = 20; addLog('potion forced your NaN HP back into a number. rude but effective.', 'sys'); }
+    else state.hp = Math.min(num(state.maxHp,20), num(state.hp,20) + 10);
+    save(); render(); addLog(`heal used. hp=${weirdLabel(state.hp)} gold=${weirdLabel(state.gold)}`, 'sys');
+  }
+
+  function shop() {
+    if (String(state.weapon).toLowerCase().includes('sword')) { addLog('you already have a sword. greedy.', 'warn'); return; }
+    if (state.gold === Infinity) { state.weapon = 'infinity sword'; addLog('you bought the infinity sword. shopkeeper retired instantly.', 'sys'); }
+    else if (Number.isNaN(state.gold)) { state.weapon = 'NaN blade'; state.glitch = num(state.glitch,0)+2; addLog('payment resolved to NaN. you got a weapon that technically exists.', 'warn'); }
+    else if (num(state.gold,0) >= 50) { state.gold = num(state.gold,0)-50; state.weapon = 'sword'; addLog('bought sword. slime population nervous.', 'sys'); }
+    else { addLog('need 50g for sword.', 'warn'); return; }
+    save(); render();
+  }
+
+  function nextZone() {
+    state.zone = Number.isNaN(state.zone) ? 1 : (state.zone === Infinity ? 999999 : num(state.zone,1) + 1);
+    state.enemy = enemyForZone(state.zone);
+    if (state.glitch === Infinity) { state.enemy = { name:'THE FINAL BUG', hp:Infinity, maxHp:Infinity }; addLog('glitch overflow summoned THE FINAL BUG. good luck lmao.', 'bad'); }
+    else addLog(`moved to zone ${weirdLabel(state.zone)}. enemy: ${state.enemy.name}.`, 'sys');
+    save(); render();
+  }
+
+  function applyEdits() {
+    state.hp = parseWeird($('eHp').value, state.hp);
+    state.gold = parseWeird($('eGold').value, state.gold);
+    state.level = parseWeird($('eLevel').value, state.level);
+    state.glitch = parseWeird($('eGlitch').value, state.glitch);
+    state.name = parseWeird($('eName').value, state.name);
+    state.weapon = parseWeird($('eWeapon').value, state.weapon);
+    addLog('manual edits applied. reality recalculating...', 'warn');
+    save(); render();
+  }
+
+  function exportJson() {
+    $('raw').value = JSON.stringify(state, null, 2);
+    navigator.clipboard?.writeText($('raw').value).catch(()=>{});
+    addLog('exported save JSON (also tried clipboard).', 'sys');
+  }
+
+  function importJson() {
+    try {
+      const obj = JSON.parse($('raw').value);
+      state = { ...defaults(), ...obj };
+      if (!state.enemy) state.enemy = defaults().enemy;
+      addLog('imported JSON save. welcome back, reality hacker.', 'warn');
+      save(); render();
+    } catch (e) { addLog('import failed: ' + e.message, 'bad'); }
+  }
+
+  function copyCursedUrl() {
+    const p = new URLSearchParams({ hp: weirdLabel(state.hp), gold: weirdLabel(state.gold), level: weirdLabel(state.level), glitch: weirdLabel(state.glitch), name: weirdLabel(state.name) });
+    const url = location.origin + location.pathname + '?' + p.toString();
+    navigator.clipboard?.writeText(url).then(()=>addLog('cursed URL copied.', 'sys')).catch(()=>addLog(url, 'warn'));
+  }
+
+  function resetSave() {
+    localStorage.removeItem(KEY);
+    state = defaults();
+    rebuildLog();
+    addLog('save wiped. fresh timeline loaded.', 'sys');
+    save(); render();
+  }
+
+  function showTutorial(force=false) {
+    if (!force && localStorage.getItem(TUT_KEY)) return;
+    $('tutorialBg').classList.add('show');
+  }
+  function hideTutorial(never=false) {
+    $('tutorialBg').classList.remove('show');
+    if (never) localStorage.setItem(TUT_KEY, '1');
+    else localStorage.setItem(TUT_KEY, '1');
+  }
+
+  $('btnFight').onclick = fight;
+  $('btnHeal').onclick = heal;
+  $('btnShop').onclick = shop;
+  $('btnNext').onclick = nextZone;
+  $('btnSave').onclick = () => { save(); addLog('saved to localStorage.', 'sys'); };
+  $('btnReset').onclick = resetSave;
+  $('btnApply').onclick = applyEdits;
+  $('btnExport').onclick = exportJson;
+  $('btnImport').onclick = importJson;
+  $('btnURL').onclick = copyCursedUrl;
+  $('btnTutorial').onclick = () => showTutorial(true);
+  $('tutorialClose').onclick = () => hideTutorial(true);
+  $('tutorialNever').onclick = () => hideTutorial(true);
+
+  async function idbPut() {
+    try {
+      const req = indexedDB.open('CorruptSaveDB', 1);
+      req.onupgradeneeded = () => { const db=req.result; if(!db.objectStoreNames.contains('saves')) db.createObjectStore('saves'); };
+      req.onsuccess = () => { const db=req.result; const tx=db.transaction('saves','readwrite'); tx.objectStore('saves').put(state, 'state'); tx.oncomplete=()=>db.close(); };
+    } catch {}
+  }
+  async function idbLoad() {
+    return new Promise(resolve => {
+      try {
+        const req = indexedDB.open('CorruptSaveDB', 1);
+        req.onupgradeneeded = () => { const db=req.result; if(!db.objectStoreNames.contains('saves')) db.createObjectStore('saves'); };
+        req.onsuccess = () => {
+          const db=req.result; const tx=db.transaction('saves','readonly'); const g=tx.objectStore('saves').get('state');
+          g.onsuccess = () => { resolve(g.result || null); db.close(); };
+          g.onerror = () => { resolve(null); db.close(); };
+        };
+        req.onerror = () => resolve(null);
+      } catch { resolve(null); }
+    });
+  }
+  const _save = save;
+  save = function(){ _save(); idbPut(); };
+
+  window.game = { get state(){ return state; }, set state(v){ state=v; }, save, load, render, addLog, parseWeird, reset: resetSave, idbPut, idbLoad, keys:{local:KEY,session:SKEY,cookie:CKEY,idb:'CorruptSaveDB/saves/state'} };
+  window.save = () => save();
+  rebuildLog();
+  render();
+  idbLoad().then(v => { if (v && typeof v==='object') { state = { ...state, ...v, idbTouched:true }; render(); addLog('indexedDB save detected and merged. extra corruption surface loaded.', 'warn'); } });
+  addLog('tip: open console and type game.state.gold = Infinity; game.render();', 'warn');
+  showTutorial(false);
+})();
+</script>
+</body>
+</html>
