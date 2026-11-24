@@ -221,21 +221,25 @@
     $('raw').value = JSON.stringify(state, null, 2);
   }
 
+  function isNaNish(v){ return typeof v==='number' && Number.isNaN(v); }
+  function isInf(v){ return v === Infinity; }
+  function isNegInf(v){ return v === -Infinity; }
+  function isNullishName(v){ return v===null || v===undefined || /^null$/i.test(String(v)) || /^undefined$/i.test(String(v)) || String(v).trim()===''; }
   function realityMode() {
-    const vals = [state.hp, state.gold, state.level, state.glitch, state.enemy?.hp];
-    const hasNaN = vals.some(v => typeof v === 'number' && Number.isNaN(v));
-    const hasInf = vals.some(v => v === Infinity);
-    const hasNegInf = vals.some(v => v === -Infinity);
-    const nameBad = state.name === null || state.name === undefined || /^null$/i.test(String(state.name)) || /^undefined$/i.test(String(state.name)) || String(state.name).trim() === '';
+    const vals = [state.hp, state.gold, state.level, state.glitch, state.enemy?.hp, state.maxHp, state.zone];
+    const hasNaN = vals.some(isNaNish);
+    const hasInf = vals.some(isInf);
+    const hasNegInf = vals.some(isNegInf);
+    const nameBad = isNullishName(state.name);
     document.body.classList.toggle('void', !!hasNegInf);
     document.body.classList.toggle('ascend', !!hasInf && !hasNegInf);
     $('app').classList.toggle('glitch', !!hasNaN);
     let msg = 'reality stable. for now.';
-    if (nameBad) msg = 'identity corruption detected: who are you?';
-    if (hasNaN) msg = 'NaN leak detected: math is having a panic attack.';
-    if (hasInf) msg = 'Infinity overflow: you are becoming financially/physically illegal.';
-    if (hasNegInf) msg = 'NEGATIVE INFINITY: welcome to the void. numbers fell downstairs.';
-    if (hasNaN && hasInf) msg = 'NaN + Infinity: reality is screaming in two languages.';
+    if (nameBad) msg = 'identity corrupted: NPCs cannot target a name that does not exist. shop/heal may misfire.';
+    if (hasNaN) msg = 'NaN contamination: combat math, enemy HP, and rewards may resolve to nonsense every action.';
+    if (hasInf) msg = 'Infinity overflow: godlike power active, but economy/progression/UI start breaking.';
+    if (hasNegInf) msg = '-Infinity collapse: void rules active. healing hurts, enemies hit harder, zone decays.';
+    if (hasNaN && hasInf) msg = 'NaN + Infinity: unstable godhood. actions have random corrupted outcomes.';
     $('stateBanner').textContent = msg;
     return { hasNaN, hasInf, hasNegInf, nameBad };
   }
@@ -256,85 +260,137 @@
     $('enemyName').textContent = weirdLabel(state.enemy?.name || '???');
     $('enemyHp').textContent = weirdLabel(state.enemy?.hp ?? '?');
     $('weaponName').textContent = weirdLabel(state.weapon || 'nothing');
-    document.title = mode.hasNaN ? 'C̷o̷r̷r̷u̷p̷t̷S̷a̷v̷e̷' : mode.hasNegInf ? 'VOID SAVE' : mode.hasInf ? 'ASCENDED SAVE' : 'CorruptSave';
-    if (mode.hasInf) $('sGold').textContent = weirdLabel(state.gold) + ' ✨';
-    if (mode.hasNaN) $('sGlitch').textContent = weirdLabel(state.glitch) + ' ?!';
-    if (mode.nameBad) $('enemyName').textContent = `${$('enemyName').textContent} (it knows you forgot your name)`;
+    document.title = mode.hasNaN ? 'C?o?r?r?u?p?t?S?a?v?e?' : mode.hasNegInf ? 'VOID SAVE' : mode.hasInf ? 'ASCENDED SAVE' : 'CorruptSave';
+
+    if (isInf(state.hp)) $('sHp').textContent += ' (immortal)';
+    if (isNegInf(state.hp)) $('sHp').textContent += ' (voidbound)';
+    if (isNaNish(state.hp)) $('sHp').textContent += ' (unknown)';
+    if (isInf(state.gold)) $('sGold').textContent += ' (overflow)';
+    if (isNegInf(state.gold)) $('sGold').textContent += ' (debt)';
+    if (isNaNish(state.gold)) $('sGold').textContent += ' (laundering?)';
+    if (isInf(state.level)) $('sLevel').textContent += ' (max?)';
+    if (isNaNish(state.level)) $('sLevel').textContent += ' (???lvl)';
+    if (mode.nameBad) $('enemyName').textContent = `${$('enemyName').textContent} (no target lock)`;
+    if (isInf(state.enemy?.hp)) $('enemyHp').textContent += ' (unkillable)';
+    if (isNaNish(state.enemy?.hp)) $('enemyHp').textContent += ' (unstable)';
+
+    $('btnFight').textContent = mode.hasNaN ? '?? fight (unstable)' : (isInf(state.level)||isInf(state.gold)) ? '?? smite' : mode.hasNegInf ? '?? struggle' : '?? fight';
+    $('btnHeal').textContent = isNegInf(state.gold) ? '?? heal (cursed)' : '?? heal (10g)';
+    $('btnShop').textContent = isInf(state.gold) ? '?? buy god sword' : isNaNish(state.gold) ? '?? buy ???' : '?? buy sword (50g)';
     syncEditor();
   }
 
   function dmgRoll() {
-    const base = String(state.weapon).toLowerCase().includes('sword') ? 7 : 3;
-    const lvl = num(state.level, 1);
-    let dmg = base + Math.max(0, Math.floor(lvl));
-    if (state.gold === Infinity || state.level === Infinity) dmg = Infinity;
-    if (Number.isNaN(state.gold) || Number.isNaN(state.level) || Number.isNaN(state.glitch)) dmg = NaN;
-    if (state.glitch === -Infinity) dmg = 0;
+    const mode = realityMode();
+    const base = /sword|blade/i.test(String(state.weapon)) ? 7 : 3;
+    const lvl = isNaNish(state.level) ? NaN : (state.level === Infinity ? Infinity : num(state.level,1));
+    let dmg = base + Math.max(0, Math.floor(num(lvl,1)));
+    if (state.weapon === null || state.weapon === undefined || /^null|undefined$/i.test(String(state.weapon))) dmg = Math.max(1, dmg - 2);
+    if (isInf(state.level) || isInf(state.gold) || isInf(dmg)) dmg = Infinity;
+    if (isNaNish(state.level) || isNaNish(state.glitch) || isNaNish(state.hp)) dmg = Math.random() < .5 ? NaN : Math.floor(Math.random()*12);
+    if (isNegInf(state.glitch) || isNegInf(state.level)) dmg = 1;
+    if (mode.nameBad && Math.random() < .25) dmg = 0;
     return dmg;
   }
 
   function fight() {
     const mode = realityMode();
     let dmg = dmgRoll();
-    if (Number.isNaN(dmg)) {
+
+    if (isNaNish(state.enemy?.hp)) {
+      if (Math.random() < .5) { state.enemy.hp = 0; addLog('enemy HP was NaN - reality rounded it to dead.', 'warn'); }
+      else { state.enemy.hp = 999; addLog('enemy HP was NaN - it stabilized into 999. oops.', 'bad'); }
+    }
+
+    if (isNaNish(dmg)) {
       state.glitch = num(state.glitch,0) + 1;
-      state.enemy.hp = Number.isNaN(state.enemy.hp) ? 0 : state.enemy.hp;
-      addLog('you swung NaN damage. the slime files a bug report.', 'warn');
+      const roll = Math.random();
+      if (roll < .33) { state.enemy.hp = 0; addLog('NaN damage crit: enemy ceased to be.', 'warn'); }
+      else if (roll < .66) { state.hp = isInf(state.hp) ? Infinity : num(state.hp,20) - 3; addLog('NaN damage backfired: you hit yourself for 3.', 'bad'); }
+      else { state.gold = isNaNish(state.gold) ? NaN : num(state.gold,0) + 1; addLog('NaN damage turned into 1 glitch-gold somehow.', 'warn'); }
     } else if (dmg === Infinity) {
       state.enemy.hp = 0;
-      addLog('INFINITE DAMAGE. enemy deleted from canon.', 'sys');
+      state.gold = isNaNish(state.gold) ? NaN : (state.gold === -Infinity ? -Infinity : Infinity);
+      addLog('INFINITY STRIKE: enemy deleted; loot table overflowed to Infinity.', 'sys');
     } else {
-      state.enemy.hp = num(state.enemy.hp, 10) - dmg;
-      addLog(`you hit ${state.enemy.name} for ${weirdLabel(dmg)} damage.`, 'sys');
+      state.enemy.hp = num(state.enemy.hp,10) - dmg;
+      addLog(`you hit ${weirdLabel(state.enemy.name)} for ${weirdLabel(dmg)}.`, 'sys');
     }
 
     if (num(state.enemy.hp,1) <= 0) {
-      const reward = state.gold === Infinity ? Infinity : (Number.isNaN(state.gold) ? NaN : num(state.gold,0) + 8 + num(state.level,1)*2);
-      state.gold = reward;
-      state.level = Number.isNaN(state.level) ? NaN : (state.level === Infinity ? Infinity : num(state.level,1) + 0.25);
-      addLog(`enemy defeated. gold is now ${weirdLabel(state.gold)}.`, 'sys');
-      state.enemy = enemyForZone(num(state.zone,1) + (Math.random()>.7?1:0));
+      let reward = 8 + Math.max(1, Math.floor(num(state.level,1)*2));
+      if (isInf(state.gold)) reward = Infinity;
+      if (isNegInf(state.gold)) reward = -50;
+      if (isNaNish(state.gold) || isNaNish(state.level)) reward = Math.random() < .5 ? NaN : 0;
+      if (isInf(reward)) state.gold = Infinity; else if (isNaNish(reward)) state.gold = NaN; else state.gold = num(state.gold,0) + reward;
+
+      if (isNaNish(state.level)) state.level = Math.random() < .5 ? 1 : NaN;
+      else if (isInf(state.level)) state.level = Infinity;
+      else state.level = num(state.level,1) + 0.25;
+
+      if (mode.nameBad) addLog('enemy died, but nobody was credited. reward glitched.', 'warn');
+      addLog(`enemy defeated. gold=${weirdLabel(state.gold)} level=${weirdLabel(state.level)}`, 'sys');
+      state.enemy = enemyForZone(Math.max(1, Math.floor(num(state.zone,1) + (Math.random()>.7?1:0))));
+      if (isNegInf(state.zone)) state.enemy = { name:'void echo', hp:1, maxHp:1 };
     } else {
       let edmg = 2 + Math.floor(Math.random()*3);
-      if (mode.hasNegInf) edmg = 9999;
-      if (state.hp === Infinity) { addLog('enemy hits you, but infinity HP just laughs.', 'warn'); }
-      else if (Number.isNaN(state.hp)) { state.hp = NaN; addLog('enemy hit you. your HP was NaN so... still NaN?', 'warn'); }
+      if (mode.hasNegInf) edmg = 12 + Math.floor(Math.random()*8);
+      if (isNaNish(state.enemy.hp)) edmg = Math.floor(Math.random()*10);
+      if (mode.nameBad) edmg += 2;
+      if (isInf(state.hp)) addLog(`enemy hit for ${edmg}, but Infinity HP ignored it.`, 'warn');
+      else if (isNaNish(state.hp)) { state.hp = Math.random()<.5 ? 1 : 20; addLog(`your NaN HP snapped to ${state.hp} when hit.`, 'warn'); }
+      else if (isNegInf(state.hp)) { state.hp = 1; addLog('-Infinity HP collapsed upward to 1. weirdly merciful.', 'warn'); }
       else { state.hp = num(state.hp,20) - edmg; addLog(`${state.enemy.name} hits you for ${edmg}.`, 'bad'); }
     }
 
     if (typeof state.hp === 'number' && !Number.isNaN(state.hp) && state.hp !== Infinity && state.hp <= 0) {
-      addLog('you died. the save file giggles. HP reset to 1, gold taxed.', 'bad');
+      addLog('you died. respawned at 1 HP; gold got taxed by the void.', 'bad');
       state.hp = 1;
-      if (typeof state.gold === 'number' && !Number.isNaN(state.gold) && state.gold !== Infinity) state.gold = Math.max(0, Math.floor(state.gold/2));
+      if (typeof state.gold === 'number' && !Number.isNaN(state.gold) && state.gold !== Infinity && state.gold !== -Infinity) state.gold = Math.max(0, Math.floor(state.gold/2));
+      if (isNegInf(state.gold)) state.gold = -Infinity;
     }
     save(); render();
   }
 
   function heal() {
-    if (state.gold === -Infinity) { addLog('you try to pay with -Infinity gold. the potion shop bans you from economics.', 'bad'); return save(), render(); }
-    if (Number.isNaN(state.gold)) { state.hp = NaN; state.glitch = num(state.glitch,0)+1; addLog('NaN gold transaction corrupted your blood. HP became NaN.', 'warn'); return save(), render(); }
+    const mode = realityMode();
+    if (mode.nameBad) { addLog('shopkeeper: "i can\'t heal someone with no name." identity required.', 'warn'); return; }
+    if (state.gold === -Infinity) { state.hp = isInf(state.hp) ? Infinity : Math.max(1, num(state.hp,20) - 10); addLog('-Infinity gold: the potion drained 10 HP instead of healing.', 'bad'); return save(), render(); }
+    if (isNaNish(state.gold)) { state.hp = Math.random()<.5 ? NaN : 1; state.glitch = num(state.glitch,0)+1; addLog('NaN gold transaction corrupted potion. HP got weird.', 'warn'); return save(), render(); }
     if (state.gold !== Infinity && num(state.gold,0) < 10) { addLog('not enough gold. go hit a slime.', 'warn'); return; }
     if (state.gold !== Infinity) state.gold = num(state.gold,0) - 10;
-    if (state.hp === Infinity) addLog('you drank a potion at infinite HP. it tasted like redundancy.', 'warn');
-    else if (Number.isNaN(state.hp)) { state.hp = 20; addLog('potion forced your NaN HP back into a number. rude but effective.', 'sys'); }
+    if (isInf(state.hp)) addLog('potion used at Infinity HP. nothing changed, except your ego.', 'warn');
+    else if (isNaNish(state.hp)) { state.hp = 20; addLog('potion snapped NaN HP back to 20.', 'sys'); }
+    else if (isNegInf(state.hp)) { state.hp = 10; addLog('-Infinity HP can\'t be healed normally; it became 10.', 'warn'); }
     else state.hp = Math.min(num(state.maxHp,20), num(state.hp,20) + 10);
-    save(); render(); addLog(`heal used. hp=${weirdLabel(state.hp)} gold=${weirdLabel(state.gold)}`, 'sys');
+    addLog(`heal used. hp=${weirdLabel(state.hp)} gold=${weirdLabel(state.gold)}`, 'sys');
+    save(); render();
   }
 
   function shop() {
-    if (String(state.weapon).toLowerCase().includes('sword')) { addLog('you already have a sword. greedy.', 'warn'); return; }
-    if (state.gold === Infinity) { state.weapon = 'infinity sword'; addLog('you bought the infinity sword. shopkeeper retired instantly.', 'sys'); }
-    else if (Number.isNaN(state.gold)) { state.weapon = 'NaN blade'; state.glitch = num(state.glitch,0)+2; addLog('payment resolved to NaN. you got a weapon that technically exists.', 'warn'); }
+    const mode = realityMode();
+    if (mode.nameBad && Math.random()<.5) { addLog('shopkeeper refuses service: your save name is null/undefined.', 'warn'); return; }
+    if (/sword|blade/i.test(String(state.weapon))) { addLog('you already have a sword. greedy.', 'warn'); return; }
+    if (state.gold === Infinity) { state.weapon = 'infinity sword'; addLog('Infinity gold purchased INFINITY SWORD. damage cap removed.', 'sys'); }
+    else if (state.gold === -Infinity) { state.weapon = 'debt stick'; addLog('-Infinity gold bought a debt stick. it sucks.', 'bad'); }
+    else if (isNaNish(state.gold)) { state.weapon = 'NaN blade'; state.glitch = num(state.glitch,0)+2; addLog('NaN gold paid for a NaN blade. damage is now random.', 'warn'); }
     else if (num(state.gold,0) >= 50) { state.gold = num(state.gold,0)-50; state.weapon = 'sword'; addLog('bought sword. slime population nervous.', 'sys'); }
     else { addLog('need 50g for sword.', 'warn'); return; }
     save(); render();
   }
 
   function nextZone() {
-    state.zone = Number.isNaN(state.zone) ? 1 : (state.zone === Infinity ? 999999 : num(state.zone,1) + 1);
-    state.enemy = enemyForZone(state.zone);
-    if (state.glitch === Infinity) { state.enemy = { name:'THE FINAL BUG', hp:Infinity, maxHp:Infinity }; addLog('glitch overflow summoned THE FINAL BUG. good luck lmao.', 'bad'); }
-    else addLog(`moved to zone ${weirdLabel(state.zone)}. enemy: ${state.enemy.name}.`, 'sys');
+    const mode = realityMode();
+    if (isNaNish(state.zone)) { state.zone = 1; addLog('NaN zone collapsed to zone 1.', 'warn'); }
+    else if (isInf(state.zone)) { state.zone = 999999; addLog('Infinity zone clamped at 999999. the map gave up.', 'warn'); }
+    else if (isNegInf(state.zone)) { state.zone = 0; addLog('-Infinity zone sent you to zone 0: the void lobby.', 'bad'); }
+    else state.zone = num(state.zone,1) + 1;
+
+    state.enemy = enemyForZone(Math.max(0, Math.floor(num(state.zone,1))));
+    if (isInf(state.glitch)) { state.enemy = { name:'THE FINAL BUG', hp:Infinity, maxHp:Infinity }; addLog('glitch=Infinity spawned THE FINAL BUG (Infinity HP).', 'bad'); }
+    if (isNaNish(state.glitch)) { state.enemy.hp = NaN; addLog('glitch=NaN corrupted enemy HP on arrival.', 'warn'); }
+    if (mode.hasNegInf) { state.enemy.name = 'void ' + state.enemy.name; state.enemy.hp = num(state.enemy.hp,10) + 20; state.enemy.maxHp = state.enemy.hp; addLog('void rules buffed this enemy.', 'bad'); }
+    addLog(`moved to zone ${weirdLabel(state.zone)}. enemy: ${state.enemy.name}.`, 'sys');
     save(); render();
   }
 
